@@ -1,6 +1,6 @@
 import express, { json } from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 
@@ -23,29 +23,43 @@ banco.connect().then(() => {
 
 const userSchema = joi.object({
 
-	name: joi.string().required()
+	name: joi.string().min(3).max(30).trim().required()
 });
 
 
 
-server.get("/users", async (req, res) => {
+server.get("/participants", async (req, res) => {
 	try{
 		const data = await db.collection("uol").find().toArray();
-		res.send(data);
+		res.status(200).send(data);
 	} catch(error){
 		res.status(500).send(error.message);
 	}
 });
 
-server.post("/users", (req, res) => {
+server.post("/participants", async (req, res) => {
 
 	const user = req.body;
 
 	const validation = userSchema.validate(user, {abortEarly: false});
 
 	if(validation.error){
-		res.status(400).send(validation.error.details.map(item => item.message));
+		res.status(422).send(validation.error.details.map(item => item.message));
+		return;
 	}
+
+	try{
+		const data = await db.collection("uol").find({name: user.name}).toArray();
+		if(data.length !== 0){
+			res.status(400).send("O usuário já existe!");
+			return;
+		}
+
+	} catch(error){
+		res.status(500).send(error.message);
+		return;
+	}
+
 
 	try{
 		db.collection("uol").insertOne(user);
@@ -56,12 +70,12 @@ server.post("/users", (req, res) => {
 });
 
 
-server.delete("/users/:id", (req, res) => {
+server.delete("/participants/:id", (req, res) => {
 	
 	const {id} = req.params;
 
 	try{
-		db.collection("uol").deleteOne({_id: new ObjectId(id)});
+		db.collection("uol").deleteOne({_id: new ObjectId(id) });
 		res.status(200).send("Usuário deletado com sucesso!");
 	} catch(error){
 		res.status(500).send(error.message);
