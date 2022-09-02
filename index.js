@@ -2,6 +2,7 @@ import express, { json } from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
+import joi from "joi";
 
 const server = express();
 
@@ -20,21 +21,51 @@ banco.connect().then(() => {
 	db = banco.db("uol");
 });
 
+const userSchema = joi.object({
 
-
-server.get("/", async (req, res) => {
-	
-	const data = await db.collection("uol").find().toArray();
-	res.send(data);
+	name: joi.string().required()
 });
 
-server.post("/", (req, res) => {
 
-	const { nome } = req.body;
 
-	db.collection("uol").insertOne({nome: nome}).then( () => {
+server.get("/users", async (req, res) => {
+	try{
+		const data = await db.collection("uol").find().toArray();
+		res.send(data);
+	} catch(error){
+		res.status(500).send(error.message);
+	}
+});
+
+server.post("/users", (req, res) => {
+
+	const user = req.body;
+
+	const validation = userSchema.validate(user, {abortEarly: false});
+
+	if(validation.error){
+		res.status(400).send(validation.error.details.map(item => item.message));
+	}
+
+	try{
+		db.collection("uol").insertOne(user);
 		res.status(201).send("Usuário inserido com sucesso!");
-	});
+	} catch(error){
+		res.status(500).send(error.message);
+	}
+});
+
+
+server.delete("/users/:id", (req, res) => {
+	
+	const {id} = req.params;
+
+	try{
+		db.collection("uol").deleteOne({_id: new ObjectId(id)});
+		res.status(200).send("Usuário deletado com sucesso!");
+	} catch(error){
+		res.status(500).send(error.message);
+	}
 });
 
 server.listen(PORT, () => {
