@@ -13,8 +13,6 @@ server.use(cors());
 
 const PORT = process.env.PORT;
 const DB_HOST = process.env.MONGO_URI;
-
-
 const banco = new MongoClient(DB_HOST);
 let db;
 
@@ -28,11 +26,9 @@ const userSchema = joi.object({
 });
 
 const messageSchema = joi.object({
-	from: joi.string().min(3).max(20).trim().required(),
 	to: joi.string().min(3).max(15).trim().required(),
 	text: joi.string().min(3).max(200).trim().required(),
-	type: joi.string().min(3).min(20).trim().required(),
-	time: joi.string().min(3).max(10).trim().required()
+	type: joi.string().min(3).max(20).trim().valid("message", "private_message").required(),
 });
 
 
@@ -44,8 +40,6 @@ server.get("/participants", async (req, res) => {
 		res.status(500).send(error.message);
 	}
 });
-
-
 server.post("/participants", async (req, res) => {
 
 	const user = req.body;
@@ -91,8 +85,6 @@ server.post("/participants", async (req, res) => {
 		res.status(500).send(error.message);
 	}
 });
-
-
 server.delete("/participants/:id", (req, res) => {
 	
 	const {id} = req.params;
@@ -108,7 +100,6 @@ server.delete("/participants/:id", (req, res) => {
 
 
 server.get("/messages", async (req, res) => {
-
 	try{
 		const data = await db.collection("messages").find().toArray();
 		res.status(200).send(data);
@@ -119,6 +110,7 @@ server.get("/messages", async (req, res) => {
 
 server.post("/messages", async (req, res) => {
 
+	const user = req.headers.user;
 	const message = req.body;
 	const validation = messageSchema.validate(message, {abortEarly: false});
 
@@ -127,13 +119,26 @@ server.post("/messages", async (req, res) => {
 		return;
 	}
 
-	try{
+	db.collection("users").findOne({name: user}).then(user => {
+		if(user){
 
-		db.collection("messages").insertOne(message);
-		res.status(200).send("Mensagem inserida com sucesso!");
-	} catch(error){
-		res.status(500).send(error.message);
-	}
+			const newMessage = {
+				from: user.name,
+				...message,
+				time: dayjs().format("HH:mm:ss")
+			};
+
+			try{
+				db.collection("messages").insertOne(newMessage);
+				res.sendStatus(201);
+			} catch(error){
+				res.status(500).send(error.message);
+			}
+		}
+		else{
+			res.status(404).send("Este usuário não existe!");
+		}
+	});
 });
 
 server.listen(PORT, () => {
