@@ -4,6 +4,8 @@ import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
+import limitData from "./limitData.js";
+
 
 const server = express();
 
@@ -80,7 +82,7 @@ server.post("/participants", async (req, res) => {
 	try{
 		db.collection("users").insertOne(newUser);
 		db.collection("messages").insertOne(newMessage);
-		res.status(201);
+		res.sendStatus(201);
 	} catch(error){
 		res.status(500).send(error.message);
 	}
@@ -100,8 +102,13 @@ server.delete("/participants/:id", (req, res) => {
 
 
 server.get("/messages", async (req, res) => {
+
+	const user = req.headers.user;
+	const limit = req.query.limit;
+	
 	try{
-		const data = await db.collection("messages").find().toArray();
+		const data = await db.collection("messages").find({$or: [{from:user},{to:user},{to:"Todos"}, {type:"message"}]}).toArray();
+		const dataLimited = limitData(limit, data);
 		res.status(200).send(data);
 	} catch(error){
 		res.status(500).send(error.message);
@@ -144,3 +151,4 @@ server.post("/messages", async (req, res) => {
 server.listen(PORT, () => {
 	console.log(`Servidor rodando na porta ${PORT}`);
 });
+// listen();	
