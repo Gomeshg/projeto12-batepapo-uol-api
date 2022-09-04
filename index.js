@@ -108,8 +108,8 @@ server.get("/messages", async (req, res) => {
 	
 	try{
 		const data = await db.collection("messages").find({$or: [{from:user},{to:user},{to:"Todos"}, {type:"message"}]}).toArray();
-		const dataLimited = limitData(limit, data);
-		res.status(200).send(data);
+		const newData = limitData(limit, data);
+		res.status(200).send(newData);
 	} catch(error){
 		res.status(500).send(error.message);
 	}
