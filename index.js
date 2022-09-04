@@ -152,12 +152,11 @@ server.post("/messages", async (req, res) => {
 
   const validation = messageSchema.validate(message, { abortEarly: false });
 
-  console.log(message);
   if (validation.error) {
     res.status(422).send(validation.error.details.map((item) => item.message));
     return;
   }
-  res.sendStatus(200);
+
   try {
     const user = await db.collection("users").findOne({ name: userName });
 
@@ -179,6 +178,63 @@ server.post("/messages", async (req, res) => {
     }
   } catch (error) {
     res.status(500).send(error.message);
+  }
+});
+
+server.delete("/messages/:id", async (req, res) => {
+  const { id } = req.params;
+  const userName = req.headers.user;
+
+  try {
+    const message = await db
+      .collection("messages")
+      .findOne({ _id: new ObjectId(id) });
+
+    if (message) {
+      if (message.from === userName) {
+        await db.collection("messages").deleteOne({ _id: new ObjectId(id) });
+        res.sendStatus(200);
+      } else {
+        res.sendStatus(401);
+      }
+    } else {
+      res.sendStatus(404);
+    }
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+server.put("/messages/:id", async (req, res) => {
+  const userName = req.headers.user;
+  const { id } = req.params;
+  const messageObj = req.body;
+
+  messageObj.to = stripHtml(messageObj.to).result;
+  messageObj.text = stripHtml(messageObj.text).result;
+  messageObj.type = stripHtml(messageObj.type).result;
+
+  const validation = messageSchema.validate(messageObj, { abortEarly: false });
+
+  if (validation.error) {
+    res.status(422).send(validation.error.details.map((item) => item.message));
+    return;
+  }
+
+  const message = await db
+    .collection("messages")
+    .findOne({ _id: new ObjectId(id) });
+
+  if (message) {
+    if (message.from === userName) {
+      await db
+        .collection("messages")
+        .updateOne({ _id: new ObjectId(id) }, { $set: validation.value });
+    } else {
+      res.sendStatus(401);
+    }
+  } else {
+    res.sendStatus(404);
   }
 });
 
