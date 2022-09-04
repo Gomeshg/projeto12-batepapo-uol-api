@@ -22,6 +22,35 @@ banco.connect().then(() => {
   console.log("Banco conectado com sucesso!");
 });
 
+setInterval(async () => {
+  const users = await db.collection("users").find().toArray();
+  if (users) {
+    const usersOff = users.filter(
+      (user) => user.lastStatus + 10000 < Date.now()
+    );
+
+    if (usersOff) {
+      usersOff.forEach(async (user) => {
+        await db.collection("users").deleteOne({ _id: user._id });
+        const exitMessage = {
+          from: user.name,
+          to: "Todos",
+          text: "Sai da sala...",
+          type: "Status",
+          time: dayjs().format("HH:mm:ss"),
+        };
+
+        await db.collection("messages").insertOne(exitMessage);
+      });
+    }
+  }
+}, 15000);
+
+setInterval(async () => {
+  const messages = await db.collection("messages").find().toArray();
+  console.log(messages);
+}, 5000);
+
 const userSchema = joi.object({
   name: joi.string().min(3).max(30).trim().required(),
 });
@@ -56,11 +85,17 @@ server.post("/participants", async (req, res) => {
   }
 
   try {
-    const data = await db
-      .collection("users")
-      .find({ name: user.name })
-      .toArray();
-    if (data.length !== 0) {
+    // const data = await db
+    //   .collection("users")
+    //   .find({ name: user.name })
+    //   .toArray();
+    // if (data.length !== 0) {
+    //   res.status(409).send("O usuário já existe!");
+    //   return;
+    // }
+
+    const dataUser = await db.collection("users").findOne({ name: user.name });
+    if (dataUser) {
       res.status(409).send("O usuário já existe!");
       return;
     }
@@ -74,19 +109,17 @@ server.post("/participants", async (req, res) => {
     lastStatus: Date.now(),
   };
 
-  const timeNow = dayjs().format("HH:mm:ss");
-
   const newMessage = {
     from: newUser.name,
     to: "Todos",
     text: "Entra na sala...",
     type: "status",
-    time: timeNow,
+    time: dayjs().format("HH:mm:ss"),
   };
 
   try {
-    db.collection("users").insertOne(newUser);
-    db.collection("messages").insertOne(newMessage);
+    await db.collection("users").insertOne(newUser);
+    await db.collection("messages").insertOne(newMessage);
     res.sendStatus(201);
   } catch (error) {
     res.status(500).send(error.message);
@@ -104,7 +137,7 @@ server.delete("/participants/:id", (req, res) => {
 });
 
 server.get("/messages", async (req, res) => {
-  const user = req.headers.user;
+  const userName = req.headers.user;
   const limit = req.query.limit;
 
   try {
@@ -112,8 +145,8 @@ server.get("/messages", async (req, res) => {
       .collection("messages")
       .find({
         $or: [
-          { from: user },
-          { to: user },
+          { from: userName },
+          { to: userName },
           { to: "Todos" },
           { type: "message" },
         ],
@@ -127,7 +160,7 @@ server.get("/messages", async (req, res) => {
 });
 
 server.post("/messages", async (req, res) => {
-  const user = req.headers.user;
+  const userName = req.headers.user;
   const message = req.body;
   const validation = messageSchema.validate(message, { abortEarly: false });
 
@@ -136,26 +169,49 @@ server.post("/messages", async (req, res) => {
     return;
   }
 
-  db.collection("users")
-    .findOne({ name: user })
-    .then((user) => {
-      if (user) {
-        const newMessage = {
-          from: user.name,
-          ...message,
-          time: dayjs().format("HH:mm:ss"),
-        };
+  try {
+    const user = await db.collection("users").findOne({ name: userName });
 
-        try {
-          db.collection("messages").insertOne(newMessage);
-          res.sendStatus(201);
-        } catch (error) {
-          res.status(500).send(error.message);
-        }
-      } else {
-        res.status(404).send("Este usuário não existe!");
+    if (user) {
+      const newMessage = {
+        from: user.name,
+        ...message,
+        time: dayjs().format("HH:mm:ss"),
+      };
+
+      try {
+        await db.collection("messages").insertOne(newMessage);
+        res.sendStatus(201);
+      } catch (error) {
+        res.status(500).send(error.message);
       }
-    });
+    } else {
+      res.status(404).send("Este usuário não existe!");
+    }
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+
+  // db.collection("users")
+  //   .findOne({ name: userName })
+  //   .then(async (user) => {
+  //     if (user) {
+  //       const newMessage = {
+  //         from: user.name,
+  //         ...message,
+  //         time: dayjs().format("HH:mm:ss"),
+  //       };
+
+  //       try {
+  //         await db.collection("messages").insertOne(newMessage);
+  //         res.sendStatus(201);
+  //       } catch (error) {
+  //         res.status(500).send(error.message);
+  //       }
+  //     } else {
+  //       res.status(404).send("Este usuário não existe!");
+  //     }
+  //   });
 });
 
 server.post("/status", async (req, res) => {
@@ -163,10 +219,11 @@ server.post("/status", async (req, res) => {
   const user = await db.collection("users").findOne({ name: userName });
 
   if (user) {
-    db.collection("users").update(
-      { name: user },
-      { $set: { lastStatus: Date.now() } }
-    );
+    await db
+      .collection("users")
+      .update({ name: user }, { $set: { lastStatus: Date.now() } });
+
+    res.sendStatus(200);
   } else {
     res.sendStatus(404);
   }
@@ -175,4 +232,3 @@ server.post("/status", async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-// listen();
