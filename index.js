@@ -46,11 +46,6 @@ setInterval(async () => {
   }
 }, 15000);
 
-setInterval(async () => {
-  const messages = await db.collection("messages").find().toArray();
-  console.log(messages);
-}, 5000);
-
 const userSchema = joi.object({
   name: joi.string().min(3).max(30).trim().required(),
 });
@@ -221,7 +216,7 @@ server.post("/status", async (req, res) => {
   if (user) {
     await db
       .collection("users")
-      .update({ name: user }, { $set: { lastStatus: Date.now() } });
+      .updateOne({ name: user.name }, { $set: { lastStatus: Date.now() } });
 
     res.sendStatus(200);
   } else {
