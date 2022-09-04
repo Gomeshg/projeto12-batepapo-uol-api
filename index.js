@@ -1,6 +1,7 @@
 import express, { json } from "express";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
+import { stripHtml } from "string-strip-html";
 import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
@@ -47,19 +48,13 @@ setInterval(async () => {
 }, 15000);
 
 const userSchema = joi.object({
-  name: joi.string().min(3).max(30).trim().required(),
+  name: joi.string().trim().min(1).max(30).required(),
 });
 
 const messageSchema = joi.object({
-  to: joi.string().min(3).max(15).trim().required(),
-  text: joi.string().min(3).max(200).trim().required(),
-  type: joi
-    .string()
-    .min(3)
-    .max(20)
-    .trim()
-    .valid("message", "private_message")
-    .required(),
+  to: joi.string().trim().min(1).max(15).required(),
+  text: joi.string().trim().min(1).max(200).required(),
+  type: joi.string().trim().valid("message", "private_message").required(),
 });
 
 server.get("/participants", async (req, res) => {
@@ -72,6 +67,7 @@ server.get("/participants", async (req, res) => {
 });
 server.post("/participants", async (req, res) => {
   const user = req.body;
+  user.name = stripHtml(user.name).result;
   const validation = userSchema.validate(user, { abortEarly: false });
 
   if (validation.error) {
@@ -80,16 +76,9 @@ server.post("/participants", async (req, res) => {
   }
 
   try {
-    // const data = await db
-    //   .collection("users")
-    //   .find({ name: user.name })
-    //   .toArray();
-    // if (data.length !== 0) {
-    //   res.status(409).send("O usuário já existe!");
-    //   return;
-    // }
-
-    const dataUser = await db.collection("users").findOne({ name: user.name });
+    const dataUser = await db
+      .collection("users")
+      .findOne({ name: validation.value.name });
     if (dataUser) {
       res.status(409).send("O usuário já existe!");
       return;
@@ -100,7 +89,7 @@ server.post("/participants", async (req, res) => {
   }
 
   const newUser = {
-    name: user.name,
+    name: validation.value.name,
     lastStatus: Date.now(),
   };
 
@@ -120,11 +109,11 @@ server.post("/participants", async (req, res) => {
     res.status(500).send(error.message);
   }
 });
-server.delete("/participants/:id", (req, res) => {
+server.delete("/participants/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    db.collection("users").deleteOne({ _id: new ObjectId(id) });
+    await db.collection("users").deleteOne({ _id: new ObjectId(id) });
     res.status(200).send("Usuário deletado com sucesso!");
   } catch (error) {
     res.status(500).send(error.message);
@@ -157,20 +146,25 @@ server.get("/messages", async (req, res) => {
 server.post("/messages", async (req, res) => {
   const userName = req.headers.user;
   const message = req.body;
+  message.to = stripHtml(message.to).result;
+  message.text = stripHtml(message.text).result;
+  message.type = stripHtml(message.type).result;
+
   const validation = messageSchema.validate(message, { abortEarly: false });
 
+  console.log(message);
   if (validation.error) {
     res.status(422).send(validation.error.details.map((item) => item.message));
     return;
   }
-
+  res.sendStatus(200);
   try {
     const user = await db.collection("users").findOne({ name: userName });
 
     if (user) {
       const newMessage = {
         from: user.name,
-        ...message,
+        ...validation.value,
         time: dayjs().format("HH:mm:ss"),
       };
 
@@ -186,27 +180,6 @@ server.post("/messages", async (req, res) => {
   } catch (error) {
     res.status(500).send(error.message);
   }
-
-  // db.collection("users")
-  //   .findOne({ name: userName })
-  //   .then(async (user) => {
-  //     if (user) {
-  //       const newMessage = {
-  //         from: user.name,
-  //         ...message,
-  //         time: dayjs().format("HH:mm:ss"),
-  //       };
-
-  //       try {
-  //         await db.collection("messages").insertOne(newMessage);
-  //         res.sendStatus(201);
-  //       } catch (error) {
-  //         res.status(500).send(error.message);
-  //       }
-  //     } else {
-  //       res.status(404).send("Este usuário não existe!");
-  //     }
-  //   });
 });
 
 server.post("/status", async (req, res) => {
