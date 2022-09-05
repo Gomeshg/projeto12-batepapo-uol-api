@@ -30,14 +30,14 @@ setInterval(async () => {
       (user) => user.lastStatus + 10000 < Date.now()
     );
 
-    if (usersOff) {
+    if (usersOff.length > 0) {
       usersOff.forEach(async (user) => {
         await db.collection("users").deleteOne({ _id: user._id });
         const exitMessage = {
           from: user.name,
           to: "Todos",
           text: "Sai da sala...",
-          type: "Status",
+          type: "status",
           time: dayjs().format("HH:mm:ss"),
         };
 
@@ -65,6 +65,7 @@ server.get("/participants", async (req, res) => {
     res.status(500).send(error.message);
   }
 });
+
 server.post("/participants", async (req, res) => {
   const user = req.body;
   user.name = stripHtml(user.name).result;
@@ -109,6 +110,7 @@ server.post("/participants", async (req, res) => {
     res.status(500).send(error.message);
   }
 });
+
 server.delete("/participants/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -146,9 +148,6 @@ server.get("/messages", async (req, res) => {
 server.post("/messages", async (req, res) => {
   const userName = req.headers.user;
   const message = req.body;
-  message.to = stripHtml(message.to).result;
-  message.text = stripHtml(message.text).result;
-  message.type = stripHtml(message.type).result;
 
   const validation = messageSchema.validate(message, { abortEarly: false });
 
@@ -156,6 +155,10 @@ server.post("/messages", async (req, res) => {
     res.status(422).send(validation.error.details.map((item) => item.message));
     return;
   }
+
+  validation.value.to = stripHtml(validation.value.to).result;
+  validation.value.text = stripHtml(validation.value.text).result;
+  validation.value.type = stripHtml(validation.value.type).result;
 
   try {
     const user = await db.collection("users").findOne({ name: userName });
@@ -210,10 +213,6 @@ server.put("/messages/:id", async (req, res) => {
   const { id } = req.params;
   const messageObj = req.body;
 
-  messageObj.to = stripHtml(messageObj.to).result;
-  messageObj.text = stripHtml(messageObj.text).result;
-  messageObj.type = stripHtml(messageObj.type).result;
-
   const validation = messageSchema.validate(messageObj, { abortEarly: false });
 
   if (validation.error) {
@@ -221,35 +220,53 @@ server.put("/messages/:id", async (req, res) => {
     return;
   }
 
-  const message = await db
-    .collection("messages")
-    .findOne({ _id: new ObjectId(id) });
+  validation.value.to = stripHtml(validation.value.to).result;
+  validation.value.text = stripHtml(validation.value.text).result;
+  validation.value.type = stripHtml(validation.value.type).result;
 
-  if (message) {
-    if (message.from === userName) {
-      await db
-        .collection("messages")
-        .updateOne({ _id: new ObjectId(id) }, { $set: validation.value });
+  try {
+    const message = await db
+      .collection("messages")
+      .findOne({ _id: new ObjectId(id) });
+
+    if (message) {
+      if (message.from === userName) {
+        await db
+          .collection("messages")
+          .updateOne({ _id: new ObjectId(id) }, { $set: validation.value });
+        res.sendStatus(200);
+      } else {
+        res.sendStatus(401);
+      }
     } else {
-      res.sendStatus(401);
+      res.sendStatus(404);
     }
-  } else {
-    res.sendStatus(404);
+  } catch (error) {
+    res.status(500).send(error.message);
   }
 });
 
 server.post("/status", async (req, res) => {
   const userName = req.headers.user;
-  const user = await db.collection("users").findOne({ name: userName });
 
-  if (user) {
-    await db
-      .collection("users")
-      .updateOne({ name: user.name }, { $set: { lastStatus: Date.now() } });
+  try {
+    const user = await db.collection("users").findOne({ name: userName });
 
-    res.sendStatus(200);
-  } else {
-    res.sendStatus(404);
+    if (user) {
+      try {
+        await db
+          .collection("users")
+          .updateOne({ name: user.name }, { $set: { lastStatus: Date.now() } });
+
+        res.sendStatus(200);
+      } catch (error) {
+        res.status(500).send(error.message);
+      }
+    } else {
+      res.sendStatus(404);
+    }
+  } catch (error) {
+    res.status(500).send(error.message);
   }
 });
 
