@@ -32,7 +32,6 @@ setInterval(async () => {
 
     if (usersOff.length > 0) {
       usersOff.forEach(async (user) => {
-        await db.collection("users").deleteOne({ _id: user._id });
         const exitMessage = {
           from: user.name,
           to: "Todos",
@@ -41,6 +40,7 @@ setInterval(async () => {
           time: dayjs().format("HH:mm:ss"),
         };
 
+        await db.collection("users").deleteOne({ _id: user._id });
         await db.collection("messages").insertOne(exitMessage);
       });
     }
